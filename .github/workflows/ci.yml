@@ -68,6 +68,47 @@ jobs:
               'secret_key': '${{ env.SECRET_KEY }}'
             }"
 
+      - name: テスト用 secrets.yaml.encrypted の生成
+        env:
+          # config.yaml生成時に使ったものと同じSECRET_KEYを渡す
+          SECRET_KEY: "dummy_secret_key_for_testing_32bytes"
+          # DBパスワードもダミーで渡す（Fernet暗号化で使用）
+          DB_PASSWORD: "dummy_db_password_for_testing"
+        run: |
+          # SecretManagerを使ってsecrets.yaml.encryptedを生成
+          python3 << 'EOF'
+          import yaml
+          import sys
+          from pathlib import Path
+          
+          # config/secrets.pyからSecretManagerをインポート
+          sys.path.insert(0, str(Path.cwd()))
+          from config.secrets import SecretManager
+          
+          # 環境変数から取得
+          secret_key = "${{ env.SECRET_KEY }}"
+          db_password = "${{ env.DB_PASSWORD }}"
+          
+          # SecretManagerで暗号化
+          secret_manager = SecretManager(secret_key=secret_key)
+          encrypted_password = secret_manager.encrypt(db_password)
+          
+          # secrets.yaml.encryptedを作成
+          secrets_data = {
+              "database": {
+                  "password": f"encrypted:{encrypted_password}"
+              }
+          }
+          
+          output_path = Path("config") / "secrets.yaml.encrypted"
+          output_path.parent.mkdir(parents=True, exist_ok=True)
+          
+          with open(output_path, "w", encoding="utf-8") as f:
+              yaml.dump(secrets_data, f, default_flow_style=False, allow_unicode=True)
+          
+          print(f"✓ Created {output_path}")
+          EOF
+
       - name: Black (Formatter check) の実行
         run: black --check .
         continue-on-error: true
