@@ -128,6 +128,7 @@ jobs:
       - name: Backend テストの実行 (pytest)
         env:
           PYTHONPATH: ${{ github.workspace }}
+          FLASK_RUN_DIR: ${{ github.workspace }}/tmp_run_data
         run: |
           if [ -d tests ]; then
             pytest tests/
