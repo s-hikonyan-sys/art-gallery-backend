@@ -1,0 +1,93 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # 手動実行も可能にする
+  workflow_dispatch:
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Backend コードのチェックアウト
+        uses: actions/checkout@v4
+
+      - name: art-gallery-release-tools のチェックアウト
+        uses: actions/checkout@v4
+        with:
+          # リリースツールから Ansible テンプレートや requirements.txt を取得するために必要
+          repository: ${{ github.repository_owner }}/art-gallery-release-tools
+          path: art-gallery-release-tools
+          token: ${{ secrets.GH_TOKEN_FOR_ART_GALLERY_RELEASE_TOOLS }}
+
+      - name: Python のセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip' # pip のキャッシュを有効化
+
+      - name: 依存関係のインストール
+        run: |
+          python -m pip install --upgrade pip
+          # release-tools から一元管理された requirements.txt をコピー
+          cp art-gallery-release-tools/ansible/roles/backend/internal/requirements.txt .
+          cp art-gallery-release-tools/ansible/roles/backend/internal/requirements-test-optional.txt .
+          
+          # 本番用依存関係をインストール
+          pip install -r requirements.txt
+          # テスト・CI用のオプション依存関係を追加インストール
+          pip install -r requirements-test-optional.txt
+          
+          # Ansible 関連（テスト用設定生成に必要）
+          pip install ansible cryptography pyyaml
+
+      - name: テスト用 config.yaml の生成 (Ansible 使用)
+        env:
+          # DBはmockされるため、テスト実行用に仮の値をセット（Secretsの設定は不要）
+          DB_PASSWORD: "dummy_db_password_for_testing"
+          SECRET_KEY: "dummy_secret_key_for_testing_32bytes"
+        run: |
+          mkdir -p config
+          # release-tools のテンプレートを使用して config.yaml を生成
+          ansible all -i "localhost," -c local -m template \
+            -a "src=art-gallery-release-tools/ansible/roles/backend/templates/config.yaml.j2 dest=config/config.yaml" \
+            -e "{
+              'database_name': 'test_db',
+              'database_user': 'test_user',
+              'database_password': '${{ env.DB_PASSWORD }}',
+              'database_host': 'localhost',
+              'database_port': 5432,
+              'secret_key': '${{ env.SECRET_KEY }}',
+              'app_debug': true,
+              'log_level': 'DEBUG'
+            }"
+
+      - name: Black (Formatter check) の実行
+        run: black --check .
+        continue-on-error: true
+
+      - name: Flake8 (Lint check) の実行
+        run: |
+          # 重要なエラーのみをチェック
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # スタイルガイドのチェック（警告として扱う）
+          flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+        continue-on-error: true
+
+      - name: Mypy (Type check) の実行
+        run: mypy . --ignore-missing-imports
+        continue-on-error: true
+
+      - name: Backend テストの実行 (pytest)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          if [ -d tests ]; then
+            pytest tests/
+          else
+            echo "No tests directory found, skipping pytest."
+          fi
