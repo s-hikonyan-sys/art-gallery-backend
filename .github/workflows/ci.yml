@@ -41,73 +41,73 @@ jobs:
           pip install -r requirements.txt
           # テスト・CI用のオプション依存関係を追加インストール
           pip install -r requirements-test-optional.txt
-          
-          # Ansible 関連（テスト用設定生成に必要）
-          pip install ansible cryptography pyyaml
 
-      - name: テスト用 config.yaml の生成 (Ansible 使用)
+      - name: ダミー設定ファイルの生成 (config.yaml & secrets.yaml.encrypted)
         env:
           # DBはmockされるため、テスト実行用に仮の値をセット（Secretsの設定は不要）
           DB_PASSWORD: "dummy_db_password_for_testing"
           SECRET_KEY: "dummy_secret_key_for_testing_32bytes"
+          # Backend アプリのルートをPYTHONPATHに追加（configモジュールを見つけるため）
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           mkdir -p config
-          # release-tools のテンプレートを使用して config.yaml を生成
-          ansible all -i "localhost," -c local -m template \
-            -a "src=art-gallery-release-tools/ansible/roles/backend/templates/config.yaml.j2 dest=config/config.yaml" \
-            -e "{
-              'backend_port': 8080,
-              'flask_env': 'testing',
-              'debug': true,
-              'frontend_url': 'http://localhost:3000',
-              'database_name': 'test_db',
-              'database_user': 'test_user',
-              'database_password': '${{ env.DB_PASSWORD }}',
-              'database_host': 'localhost',
-              'database_port': 5432,
-              'secret_key': '${{ env.SECRET_KEY }}'
-            }"
-
-      - name: テスト用 secrets.yaml.encrypted の生成
-        env:
-          # config.yaml生成時に使ったものと同じSECRET_KEYを渡す
-          SECRET_KEY: "dummy_secret_key_for_testing_32bytes"
-          # DBパスワードもダミーで渡す（Fernet暗号化で使用）
-          DB_PASSWORD: "dummy_db_password_for_testing"
-        run: |
-          # SecretManagerを使ってsecrets.yaml.encryptedを生成
-          python3 << 'EOF'
+          
+          # config.yaml を直接生成
+          cat <<EOF > config/config.yaml
+          server:
+            port: 8080
+            flask_env: testing
+            debug: true
+          frontend:
+            url: http://localhost:3000
+          database:
+            host: localhost
+            port: 5432
+            name: test_db
+            user: test_user
+          secret_key: ${{ env.SECRET_KEY }}
+          EOF
+          
+          # secrets.yaml.encrypted を直接生成（Fernet使用、config/__init__.pyを読み込まない）
+          # 理由: config/secrets.pyからSecretManagerをインポートしようとすると、
+          #       config/__init__.pyが自動的に読み込まれ、Configクラス定義時に_load_config()が実行される。
+          #       しかし_load_config()はsecrets.yaml.encryptedの存在をチェックするため、
+          #       まだ生成されていないこの時点ではFileNotFoundErrorが発生してしまう。
+          #       そのため、SecretManagerをインポートせず、Fernetを直接使用して暗号化を行う。
+          python3 -c "
           import yaml
-          import sys
-          from pathlib import Path
+          import base64
+          import os
+          from cryptography.fernet import Fernet
+          from cryptography.hazmat.primitives import hashes
+          from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
           
-          # config/secrets.pyからSecretManagerをインポート
-          sys.path.insert(0, str(Path.cwd()))
-          from config.secrets import SecretManager
+          secret_key = os.environ['SECRET_KEY']
+          db_password = os.environ['DB_PASSWORD']
           
-          # 環境変数から取得
-          secret_key = "${{ env.SECRET_KEY }}"
-          db_password = "${{ env.DB_PASSWORD }}"
+          # SecretManager._create_cipherの実装を直接適用
+          kdf = PBKDF2HMAC(
+              algorithm=hashes.SHA256(),
+              length=32,
+              salt=b\"art_gallery_salt\",
+              iterations=100000,
+          )
+          key = base64.urlsafe_b64encode(kdf.derive(secret_key.encode()))
+          fernet = Fernet(key)
           
-          # SecretManagerで暗号化
-          secret_manager = SecretManager(secret_key=secret_key)
-          encrypted_password = secret_manager.encrypt(db_password)
+          encrypted_password = fernet.encrypt(db_password.encode()).decode()
           
-          # secrets.yaml.encryptedを作成
           secrets_data = {
-              "database": {
-                  "password": f"encrypted:{encrypted_password}"
+              'database': {
+                  'password': f'encrypted:{encrypted_password}'
               }
           }
           
-          output_path = Path("config") / "secrets.yaml.encrypted"
-          output_path.parent.mkdir(parents=True, exist_ok=True)
+          with open('config/secrets.yaml.encrypted', 'w', encoding='utf-8') as f:
+              yaml.dump(secrets_data, f)
           
-          with open(output_path, "w", encoding="utf-8") as f:
-              yaml.dump(secrets_data, f, default_flow_style=False, allow_unicode=True)
-          
-          print(f"✓ Created {output_path}")
-          EOF
+          print('✓ Created config/secrets.yaml.encrypted')
+          "
 
       - name: Black (Formatter check) の実行
         run: black --check .
