@@ -4,7 +4,14 @@
 
 import pytest
 from decimal import Decimal
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+from pathlib import Path
+
+# ログディレクトリ作成処理をモック（CI環境でのPermissionErrorを回避）
+# app.py がモジュールレベルで create_app() を呼ぶ前にモックを適用する必要があるため、
+# conftest.py のインポート前にパッチを適用
+_patcher = patch.object(Path, 'mkdir')
+_patcher.start()
 
 from app import create_app
 from repositories.artwork_repository import ArtworkRepository
