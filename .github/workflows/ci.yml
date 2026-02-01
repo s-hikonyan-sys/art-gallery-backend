@@ -109,6 +109,12 @@ jobs:
           print('✓ Created config/secrets.yaml.encrypted')
           "
 
+      - name: ログディレクトリの作成 (アプリケーションの期待するパス)
+        run: |
+          # アプリが /app/logs をハードコードしているため、CI環境上にも作成する
+          sudo mkdir -p /app/logs
+          sudo chmod -R 777 /app
+
       - name: Black (Formatter check) の実行
         run: black --check .
         continue-on-error: true
@@ -128,7 +134,6 @@ jobs:
       - name: Backend テストの実行 (pytest)
         env:
           PYTHONPATH: ${{ github.workspace }}
-          FLASK_RUN_DIR: ${{ github.workspace }}/tmp_run_data
         run: |
           if [ -d tests ]; then
             pytest tests/
