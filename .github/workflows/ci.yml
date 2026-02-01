@@ -56,14 +56,16 @@ jobs:
           ansible all -i "localhost," -c local -m template \
             -a "src=art-gallery-release-tools/ansible/roles/backend/templates/config.yaml.j2 dest=config/config.yaml" \
             -e "{
+              'backend_port': 8080,
+              'flask_env': 'testing',
+              'debug': true,
+              'frontend_url': 'http://localhost:3000',
               'database_name': 'test_db',
               'database_user': 'test_user',
               'database_password': '${{ env.DB_PASSWORD }}',
               'database_host': 'localhost',
               'database_port': 5432,
-              'secret_key': '${{ env.SECRET_KEY }}',
-              'app_debug': true,
-              'log_level': 'DEBUG'
+              'secret_key': '${{ env.SECRET_KEY }}'
             }"
 
       - name: Black (Formatter check) の実行
