@@ -18,14 +18,22 @@ def _get_password_from_api(config: dict) -> str:
     """復号化APIからデータベースパスワードを取得する."""
     api_config = config.get("secrets_api", {})
     api_url = api_config.get("url")
-    auth_token = api_config.get("auth_token")
 
     if not api_url:
-        # デフォルトは Docker 内部ネットワークの固定名
-        api_url = "http://art-gallery-secrets-api:5000"
+        raise ValueError("config.yaml に secrets_api.url が設定されていません")
+
+    # トークンファイルから読み込む
+    token_file = Path("/app/tokens/backend_token.txt")
+    if not token_file.exists():
+        raise FileNotFoundError(f"トークンファイルが見つかりません: {token_file}")
+
+    try:
+        auth_token = token_file.read_text(encoding="utf-8").strip()
+    except Exception as e:
+        raise RuntimeError(f"トークンファイルの読み取りに失敗しました: {e}")
 
     if not auth_token:
-        raise ValueError("config.yaml に secrets_api.auth_token が設定されていません")
+        raise ValueError(f"トークンファイル {token_file} が空です")
 
     headers = {"X-Auth-Token": auth_token}
 
