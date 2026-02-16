@@ -9,7 +9,7 @@
 ```
 backend/
 ├── app.py                      # アプリケーションエントリーポイント
-├── config.py                   # 設定管理
+├── config/                     # 設定管理（secrets-api 連携）
 ├── requirements.txt            # Python依存関係
 ├── Dockerfile                  # Dockerイメージ定義
 ├── pytest.ini                 # pytest設定
@@ -105,22 +105,19 @@ def create_app() -> Flask:
 
 ### 2. config/ - 設定管理
 
-**責務**: 設定ファイル（`config.yaml`）からの設定読み込みと、`art-gallery-secrets-api`からの機密情報取得
+**責務**: 設定ファイル（`config.yaml`）からの設定読み込みと、`art-gallery-secrets-api` からの機密情報取得
 
 **主な機能**:
 - YAML設定ファイルの読み込み
-- `art-gallery-secrets-api` からのデータベースパスワード取得
+- `art-gallery-secrets-api` からのデータベースパスワード取得（ワンタイムトークン認証）
 - 設定値の型変換（文字列→整数など）
 - デフォルト値の提供
-- データベース接続設定の提供
 
 **設計の特徴**:
 - クラス変数による設定値の管理
-- `art-gallery-secrets-api` による機密情報の集中管理
-- `art-gallery-secrets-api` への認証トークンによるAPIアクセス制御
-- 型ヒントによる型安全性
-- クラスメソッドによる設定の提供
-- 環境変数による API URL の動的な設定
+- **機密情報の外部化**: バックエンドコンテナ内に暗号化キーや秘密情報を保持しない設計
+- **ワンタイムトークン認証**: `/app/tokens/backend_token.txt` を使用した安全な取得フロー
+- 環境変数 `SECRETS_API_URL` による接続先の動的な設定
 
 ### 3. domain/ - ドメインモデル層
 

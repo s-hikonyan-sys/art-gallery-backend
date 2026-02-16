@@ -54,9 +54,10 @@ curl http://localhost:8000/config/config.yaml
 
 ## 追加のセキュリティ対策
 
-1. **`.gitignore`で除外**: `config/config.yaml`はGitにコミットされません
-2. **環境変数での管理**: 機密情報（パスワードなど）は環境変数で管理
-3. **テンプレートファイル**: `config.yaml.example`のみGitに含める
+1. **`.gitignore`で除外**: `config/config.yaml` はGitにコミットされません。
+2. **Secrets API による管理**: データベースパスワードなどの機密情報は、専用の `art-gallery-secrets-api` から取得します。
+3. **ワンタイムトークン認証**: APIからの取得には、起動時に一度だけ有効なワンタイムトークンを使用し、使用後はトークンファイルを破棄します。
+4. **プロセスの自動終了**: `secrets-api` は役割を終えると自動的に終了し、機密情報へのアクセス経路を最小化します。
 
 ## まとめ
 
