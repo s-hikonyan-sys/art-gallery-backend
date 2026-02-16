@@ -8,11 +8,6 @@ from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
 import os
 
-from app import create_app
-from repositories.artwork_repository import ArtworkRepository
-from repositories.database import Database
-from domain.artwork import Artwork
-
 # configモジュールからTOKEN_FILEをインポートするためにインポート
 import config.__init__ as app_config
 
@@ -53,8 +48,8 @@ def app(tmp_path_factory):
             mock_response.raise_for_status.return_value = None
             mock_get.return_value = mock_response
 
-            # すでに Config クラスがインポート時に初期化されている可能性があるため、
-            # 明示的に再読み込みを行う（もし create_app が load_app_config を呼ばない場合）
+            # ここで app と Config をインポートする
+            from app import create_app
             from config import Config
 
             app = create_app()
@@ -95,6 +90,8 @@ def client(app):
 @pytest.fixture
 def artwork_repository():
     """ArtworkRepositoryのモックインスタンスを作成."""
+    from repositories.artwork_repository import ArtworkRepository
+
     return Mock(spec=ArtworkRepository)
 
 
@@ -118,4 +115,6 @@ def sample_artwork_dict():
 @pytest.fixture
 def sample_artwork(sample_artwork_dict):
     """テスト用の作品エンティティ"""
+    from domain.artwork import Artwork
+
     return Artwork.from_dict(sample_artwork_dict)
