@@ -105,34 +105,22 @@ def create_app() -> Flask:
 
 ### 2. config/ - 設定管理
 
-**責務**: 設定ファイル（`config.yaml`）からの設定読み込みと型安全なアクセス
+**責務**: 設定ファイル（`config.yaml`）からの設定読み込みと、`art-gallery-secrets-api`からの機密情報取得
 
 **主な機能**:
 - YAML設定ファイルの読み込み
-- 暗号化された機密情報の復号化
+- `art-gallery-secrets-api` からのデータベースパスワード取得
 - 設定値の型変換（文字列→整数など）
 - デフォルト値の提供
 - データベース接続設定の提供
 
-**コード構造**:
-```python
-class Config:
-    """設定クラス（クラス変数として定義）"""
-    PORT: int = _config['server']['port']
-    DB_HOST: str = _config['database']['host']
-    # ...
-    
-    @classmethod
-    def get_db_config(cls) -> dict:
-        """データベース設定を辞書形式で返す"""
-        return {...}
-```
-
 **設計の特徴**:
 - クラス変数による設定値の管理
+- `art-gallery-secrets-api` による機密情報の集中管理
+- `art-gallery-secrets-api` への認証トークンによるAPIアクセス制御
 - 型ヒントによる型安全性
 - クラスメソッドによる設定の提供
-- 設定ファイルによる一元管理
+- 環境変数による API URL の動的な設定
 
 ### 3. domain/ - ドメインモデル層
 

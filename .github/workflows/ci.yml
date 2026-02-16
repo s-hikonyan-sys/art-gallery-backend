@@ -42,11 +42,8 @@ jobs:
           # テスト・CI用のオプション依存関係を追加インストール
           pip install -r requirements-test-optional.txt
 
-      - name: ダミー設定ファイルの生成 (config.yaml & secrets.yaml.encrypted)
+      - name: ダミー設定ファイルの生成 (config.yaml)
         env:
-          # DBはmockされるため、テスト実行用に仮の値をセット（Secretsの設定は不要）
-          DB_PASSWORD: "dummy_db_password_for_testing"
-          SECRET_KEY: "dummy_secret_key_for_testing_32bytes"
           # Backend アプリのルートをPYTHONPATHに追加（configモジュールを見つけるため）
           PYTHONPATH: ${{ github.workspace }}
         run: |
@@ -65,50 +62,10 @@ jobs:
             port: 5432
             name: test_db
             user: test_user
-          secret_key: ${{ env.SECRET_KEY }}
+          secrets_api:
+            url: http://art-gallery-secrets-api:5000 # モックAPIを指す
           EOF
           
-          # secrets.yaml.encrypted を直接生成（Fernet使用、config/__init__.pyを読み込まない）
-          # 理由: config/secrets.pyからSecretManagerをインポートしようとすると、
-          #       config/__init__.pyが自動的に読み込まれ、Configクラス定義時に_load_config()が実行される。
-          #       しかし_load_config()はsecrets.yaml.encryptedの存在をチェックするため、
-          #       まだ生成されていないこの時点ではFileNotFoundErrorが発生してしまう。
-          #       そのため、SecretManagerをインポートせず、Fernetを直接使用して暗号化を行う。
-          python3 -c "
-          import yaml
-          import base64
-          import os
-          from cryptography.fernet import Fernet
-          from cryptography.hazmat.primitives import hashes
-          from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-          
-          secret_key = os.environ['SECRET_KEY']
-          db_password = os.environ['DB_PASSWORD']
-          
-          # SecretManager._create_cipherの実装を直接適用
-          kdf = PBKDF2HMAC(
-              algorithm=hashes.SHA256(),
-              length=32,
-              salt=b\"art_gallery_salt\",
-              iterations=100000,
-          )
-          key = base64.urlsafe_b64encode(kdf.derive(secret_key.encode()))
-          fernet = Fernet(key)
-          
-          encrypted_password = fernet.encrypt(db_password.encode()).decode()
-          
-          secrets_data = {
-              'database': {
-                  'password': f'encrypted:{encrypted_password}'
-              }
-          }
-          
-          with open('config/secrets.yaml.encrypted', 'w', encoding='utf-8') as f:
-              yaml.dump(secrets_data, f)
-          
-          print('✓ Created config/secrets.yaml.encrypted')
-          "
-
       - name: ログディレクトリの作成 (アプリケーションの期待するパス)
         run: |
           # アプリが /app/logs をハードコードしているため、CI環境上にも作成する
@@ -131,12 +88,30 @@ jobs:
         run: mypy . --ignore-missing-imports
         continue-on-error: true
 
+      - name: 復号APIのモック設定
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          # requests.get をモック化して、常にテスト用のパスワードを返すようにする
+          python3 -c "
+          import pytest
+          import requests
+          from unittest.mock import MagicMock
+
+          @pytest.fixture(autouse=True)
+          def mock_secrets_api(monkeypatch):
+              mock_response = MagicMock()
+              mock_response.json.return_value = {\"password\": \"test_db_password\"}
+              mock_response.raise_for_status.return_value = None
+              monkeypatch.setattr(requests, \"get\", lambda *args, **kwargs: mock_response)
+          " > tests/mock_secrets_api.py # テスト時に読み込まれるようにファイルを生成
+
       - name: Backend テストの実行 (pytest)
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           if [ -d tests ]; then
-            pytest tests/
+            pytest tests/ --import-mode=append --import-test-modules=mock_secrets_api # モックをインポート
           else
             echo "No tests directory found, skipping pytest."
           fi

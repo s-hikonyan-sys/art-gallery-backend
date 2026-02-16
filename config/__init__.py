@@ -1,68 +1,69 @@
 """設定管理モジュール.
 
 設定ファイル（config.yaml）から設定を読み込み、アプリケーション全体で使用する設定を提供します。
-機密情報（パスワードなど）はFernetで暗号化されたファイルから取得します。"""
+機密情報（パスワードなど）は専用の復号APIコンテナから取得します。"""
 
 from pathlib import Path
 from typing import Any
 
+import requests
 import yaml
-
-from .secrets import SecretManager
 
 # 設定ファイルのパス
 CONFIG_DIR = Path(__file__).parent
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
-SECRETS_FILE = CONFIG_DIR / "secrets.yaml.encrypted"
+
+# トークンファイルのパス
+TOKEN_FILE = Path("/app/tokens/backend_token.txt")
 
 
-def _get_secrets_from_encrypted_file(secret_key: str) -> dict:
-    """Fernetで暗号化されたファイルから機密情報を取得.
+def _get_token_from_file(max_retries: int = 30, retry_interval: int = 1) -> str:
+    """トークンファイルからトークンを取得（リトライあり）. """
+    import time  # 遅延インポート
 
-    注意: 環境変数は使用しません。コンテナ内のファイルから読み込みます。
-    """
-    if not SECRETS_FILE.exists():
-        raise FileNotFoundError(
-            f"必須ファイルが見つかりません: {SECRETS_FILE}\n"
-            "Ansibleデプロイ時に配置されるファイルです。"
-        )
+    for attempt in range(max_retries):
+        if TOKEN_FILE.exists():
+            try:
+                token = TOKEN_FILE.read_text().strip()
+                if token:
+                    return token
+            except Exception as e:
+                print(f"Error reading token file (attempt {attempt + 1}): {e}")
+
+        if attempt < max_retries - 1:
+            time.sleep(retry_interval)
+
+    raise RuntimeError(
+        f"Token file not found after {max_retries} attempts. "
+        "Secrets API may not have started yet or failed to generate tokens."
+    )
+
+
+def _get_password_from_api(config: dict) -> str:
+    """復号化APIからデータベースパスワードを取得する."""
+    api_config = config.get("secrets_api", {})
+    api_url = api_config.get("url")
+
+    if not api_url:
+        # デフォルトは Docker 内部ネットワークの固定名
+        api_url = "http://art-gallery-secrets-api:5000"
+
+    # backend_token.txt からトークンを読み込む
+    auth_token = _get_token_from_file()
 
     try:
-        # secrets.yaml.encryptedを読み込む
-        with open(SECRETS_FILE, "r", encoding="utf-8") as f:
-            secrets_data = yaml.safe_load(f) or {}
-
-        if not secrets_data:
-            raise ValueError(f"{SECRETS_FILE} が空です")
-
-        # SecretManagerで復号化
-        secret_manager = SecretManager(secret_key=secret_key)
-
-        # 暗号化された値を復号化
-        decrypted_secrets = {}
-        for key, value in secrets_data.items():
-            if isinstance(value, dict):
-                decrypted_secrets[key] = {}
-                for sub_key, sub_value in value.items():
-                    if SecretManager.is_encrypted(str(sub_value)):
-                        encrypted_value = SecretManager.extract_encrypted_value(
-                            str(sub_value)
-                        )
-                        decrypted_secrets[key][sub_key] = secret_manager.decrypt(
-                            encrypted_value
-                        )
-                    else:
-                        decrypted_secrets[key][sub_key] = sub_value
-            elif SecretManager.is_encrypted(str(value)):
-                encrypted_value = SecretManager.extract_encrypted_value(str(value))
-                decrypted_secrets[key] = secret_manager.decrypt(encrypted_value)
-            else:
-                decrypted_secrets[key] = value
-
-        print("✓ 暗号化ファイルから機密情報を取得しました")
-        return decrypted_secrets
-    except (FileNotFoundError, yaml.YAMLError, PermissionError) as e:
-        raise RuntimeError(f"{SECRETS_FILE} の読み込みに失敗しました: {e}") from e
+        headers = {"Authorization": f"Bearer {auth_token}"}
+        response = requests.get(
+            f"{api_url}/secrets/database/password", headers=headers, timeout=5
+        )
+        response.raise_for_status()
+        data = response.json()
+        password = data.get("password")
+        if not password:
+            raise ValueError("復号APIからパスワードを取得できませんでした")
+        return password
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"復号APIからのパスワード取得に失敗しました: {e}") from e
 
 
 def _load_config_file() -> dict:
@@ -84,17 +85,18 @@ def _load_config_file() -> dict:
 
 
 def _load_secrets(config: dict) -> dict:
-    """機密情報を暗号化ファイルから取得（必須）.
+    """復号APIから機密情報を取得（必須）または空の辞書を返す."""
+    secrets = {}
+    # 復号APIからDBパスワードを取得
+    db_password = _get_password_from_api(config)
+    if db_password:
+        secrets["database"] = {"password": db_password}
 
-    secrets.yaml.encryptedはFernetで暗号化されており、config.yamlのsecret_keyで復号化します。
-    """
-    secret_key = config.get("secret_key", "")
-    if not secret_key:
-        raise ValueError("config.yamlにsecret_keyが設定されていません")
+    # NOTE: secrets_api が backend には存在しないため、ここでは使用しない。
+    # 環境変数 SECRETS_API_URL を介して設定されることを想定。
+    # db_password は直接取得された値として扱う。
 
-    secrets = _get_secrets_from_encrypted_file(secret_key=secret_key)
-    if not secrets:
-        raise ValueError("secrets.yaml.encryptedが空です")
+    # secrets は常に空のdictを返すか、db_passwordが取得できた場合のみ'database'キーを持つ
     return secrets
 
 
@@ -103,7 +105,7 @@ def _load_config() -> dict:
     # config.yamlを読み込む（プレーンテキスト、必須）
     config = _load_config_file()
 
-    # secrets.yaml.encryptedを読み込んで復号化（必須）
+    # 復号APIから機密情報を取得（必須）
     secrets = _load_secrets(config)
 
     # 機密情報をconfigにマージ
@@ -114,15 +116,15 @@ def _load_config() -> dict:
             config["database"].update(secrets["database"])
 
     # 必須項目の検証
-    required_keys = ["server", "database", "secret_key"]
+    required_keys = ["server", "database", "secrets_api"]
     for key in required_keys:
         if key not in config:
             raise ValueError(f"config.yamlに必須項目 '{key}' がありません")
 
-    # database.passwordは必須（secrets.yaml.encryptedから取得）
+    # database.passwordは必須（APIから取得）
     if "database" in config and "password" not in config["database"]:
         raise ValueError(
-            "config.yamlにdatabase.passwordがありません（secrets.yaml.encryptedから取得される必要があります）"
+            "config.yamlにdatabase.passwordがありません（復号APIから取得される必要があります）"
         )
 
     return config
@@ -132,7 +134,7 @@ class Config:
     """アプリケーション設定クラス.
 
     設定ファイル（config.yaml）から設定値を読み込み、型安全にアクセスできるようにします。
-    機密情報（パスワードなど）は設定ファイルから読み込みます。"""
+    機密情報（パスワードなど）は設定ファイルまたは外部APIから読み込みます。"""
 
     # 設定を読み込む
     _config = _load_config()
@@ -152,8 +154,8 @@ class Config:
     DB_PORT: int = _config["database"]["port"]
     DB_NAME: str = _config["database"]["name"]
     DB_USER: str = _config["database"]["user"]
-    # パスワード: Ansible Vaultから取得（既に復号化済み）
-    DB_PASSWORD: str = _config["database"].get("password", "artpassword")
+    # パスワード: 復号APIから取得済み
+    DB_PASSWORD: str = _config["database"]["password"]
 
     @classmethod
     def load_app_config(cls) -> None:

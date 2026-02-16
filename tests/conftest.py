@@ -4,7 +4,7 @@
 
 import pytest
 from decimal import Decimal
-from unittest.mock import Mock
+from unittest.mock import Mock, MagicMock, patch
 
 from app import create_app
 from repositories.artwork_repository import ArtworkRepository
@@ -15,9 +15,23 @@ from domain.artwork import Artwork
 @pytest.fixture(scope="session")
 def app():
     """テスト用Flaskアプリケーションインスタンスを作成."""
-    app = create_app()
-    app.config["TESTING"] = True  # テストモードを有効にする
-    yield app
+    # secrets-apiの呼び出しをモック化
+    # アプリケーション初期化時にConfig._load_config()が呼ばれるため、
+    # create_app()の前にモックを設定する必要がある。
+    with patch("requests.get") as mock_get:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"password": "test_db_password"}
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+
+        # Configクラスの読み込み（_load_config）でrequests.getが呼ばれる
+        # また、TOKEN_FILEが存在しないとエラーになるため、モック化も必要かもしれないが、
+        # ここではConfig._load_configが一度だけ実行されることを期待する。
+        # すでにインポート済みの場合は、再ロードが必要になる可能性がある。
+
+        app = create_app()
+        app.config["TESTING"] = True  # テストモードを有効にする
+        yield app
 
 
 @pytest.fixture
