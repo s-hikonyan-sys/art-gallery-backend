@@ -49,22 +49,20 @@ def app(tmp_path_factory):
             mock_get.return_value = mock_response
 
             # ここで app と Config をインポートする
+            # app.py などのモジュールレベルで Config が参照されているため、
+            # モックが適用された状態でロードされるようにする
             from app import create_app
             from config import Config
 
+            # Config.load_app_config() は app.py の create_app() 内で呼ばれる
             app = create_app()
             app.config["TESTING"] = True  # テストモードを有効にする
-
-            # データベース接続などが初期化時に Config を参照する場合、
-            # ここで Config.load_app_config() を呼ぶ必要がある
-            Config.load_app_config()
 
             yield app
 
     # 4. クリーンアップ処理 (yieldの後)
     # tmp_path_factory を使用しているため、一時ディレクトリは自動的に削除されるが、
     # ファイル内容のチェックを行う場合は、念のためここに追加。
-    # ただし、通常は tmp_path_factory の自動クリーンアップで十分。
     if test_token_file_path.exists():
         try:
             current_content = test_token_file_path.read_text().strip()

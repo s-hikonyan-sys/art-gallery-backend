@@ -13,7 +13,7 @@ import yaml
 CONFIG_DIR = Path(__file__).parent
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
-# トークンファイルのパス
+# トークンファイルのパス (tests/conftest.py でモックされることを想定)
 TOKEN_FILE = Path("/app/tokens/backend_token.txt")
 
 
@@ -53,6 +53,7 @@ def _get_password_from_api(config: dict) -> str:
 
     try:
         headers = {"Authorization": f"Bearer {auth_token}"}
+        # ここでは Config を使わず、取得した api_url を使用する
         response = requests.get(
             f"{api_url}/secrets/database/password", headers=headers, timeout=5
         )
@@ -136,26 +137,14 @@ class Config:
     設定ファイル（config.yaml）から設定値を読み込み、型安全にアクセスできるようにします。
     機密情報（パスワードなど）は設定ファイルまたは外部APIから読み込みます。"""
 
-    # 設定を読み込む
-    _config = _load_config()
+    _config: dict = {}
 
-    # サーバー設定
-    PORT: int = _config["server"]["port"]
-    FLASK_ENV: str = _config["server"]["flask_env"]
-    DEBUG: bool = _config["server"].get(
-        "debug", _config["server"]["flask_env"] == "development"
-    )
-
-    # フロントエンド設定
-    FRONTEND_URL: str = _config["frontend"]["url"]
-
-    # データベース設定
-    DB_HOST: str = _config["database"]["host"]
-    DB_PORT: int = _config["database"]["port"]
-    DB_NAME: str = _config["database"]["name"]
-    DB_USER: str = _config["database"]["user"]
-    # パスワード: 復号APIから取得済み
-    DB_PASSWORD: str = _config["database"]["password"]
+    @classmethod
+    def _get_config(cls) -> dict:
+        """設定をロードして返す（未ロードの場合はロードする）."""
+        if not cls._config:
+            cls._config = _load_config()
+        return cls._config
 
     @classmethod
     def load_app_config(cls) -> None:
@@ -165,10 +154,54 @@ class Config:
     @classmethod
     def get_db_config(cls) -> dict:
         """データベース接続設定を辞書形式で返す."""
+        config = cls._get_config()
         return {
-            "host": cls.DB_HOST,
-            "port": cls.DB_PORT,
-            "database": cls.DB_NAME,
-            "user": cls.DB_USER,
-            "password": cls.DB_PASSWORD,
+            "host": config["database"]["host"],
+            "port": config["database"]["port"],
+            "database": config["database"]["name"],
+            "user": config["database"]["user"],
+            "password": config["database"]["password"],
         }
+
+    @property
+    def PORT(self) -> int:
+        return self._get_config()["server"]["port"]
+
+    @property
+    def FLASK_ENV(self) -> str:
+        return self._get_config()["server"]["flask_env"]
+
+    @property
+    def DEBUG(self) -> bool:
+        config = self._get_config()
+        return config["server"].get(
+            "debug", config["server"]["flask_env"] == "development"
+        )
+
+    @property
+    def FRONTEND_URL(self) -> str:
+        return self._get_config()["frontend"]["url"]
+
+    @property
+    def DB_HOST(self) -> str:
+        return self._get_config()["database"]["host"]
+
+    @property
+    def DB_PORT(self) -> int:
+        return self._get_config()["database"]["port"]
+
+    @property
+    def DB_NAME(self) -> str:
+        return self._get_config()["database"]["name"]
+
+    @property
+    def DB_USER(self) -> str:
+        return self._get_config()["database"]["user"]
+
+    @property
+    def DB_PASSWORD(self) -> str:
+        return self._get_config()["database"]["password"]
+
+    @property
+    def SECRETS_API_URL(self) -> str:
+        return self._get_config()["secrets_api"]["url"]
