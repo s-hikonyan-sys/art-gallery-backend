@@ -1,176 +1,96 @@
-# テストドキュメント
+# Art Gallery Backend テストドキュメント
+
+## 概要
+
+このドキュメントは、Art Gallery Backend アプリケーションのテスト構成、実行方法、および関連情報を提供します。
+Secrets APIとの連携に伴い、テスト環境におけるパスワード取得のモック化についても詳述します。
 
 ## テスト構成
 
-このプロジェクトでは、**pytest**を使用してユニットテストと結合テストを実行します。
+本プロジェクトでは **pytest** を使用し、以下の2種類のテストを実行します。
 
-### テストの種類
-
-1. **ユニットテスト** (`tests/unit/`)
-   - ドメインモデルのテスト
-   - サービスのテスト（モックリポジトリを使用）
-   - 各コンポーネントを独立してテスト
-
-2. **結合テスト** (`tests/integration/`)
-   - APIエンドポイントのテスト
-   - データベースとの統合テスト
-   - 複数のコンポーネントを組み合わせたテスト
+1.  **ユニットテスト** (`tests/unit/`)
+    *   ドメインモデルおよびサービスのビジネスロジックを独立してテストします（モックリポジトリを使用）。
+2.  **結合テスト** (`tests/integration/`)
+    *   APIエンドポイントとデータベースの連携をテストします。
 
 ## テストの実行
 
 ### すべてのテストを実行
 
 ```bash
-# コンテナ内で実行（推奨）
-docker compose exec backend pytest
-
-# またはローカルで実行（プロジェクトルートから）
 pytest
 ```
 
-**注意**: テストはプロジェクトルートから実行してください。`pytest.ini`で`src/backend`をPythonパスに追加しています。
+### 特定のテストを実行
 
-### ユニットテストのみ実行
+*   **ユニットテストのみ**:
+    ```bash
+    pytest -m unit
+    ```
+*   **結合テストのみ**:
+    ```bash
+    pytest -m integration
+    ```
+*   **特定のファイル**:
+    ```bash
+    pytest tests/unit/test_domain_artwork.py
+    ```
 
-```bash
-pytest tests/unit/ -m unit
-```
-
-### 結合テストのみ実行
-
-```bash
-pytest tests/integration/ -m integration
-```
-
-### カバレッジレポートを生成
-
-```bash
-pytest --cov=src/backend --cov-report=html:tests/htmlcov
-```
-
-カバレッジレポートは `tests/htmlcov/index.html` に生成されます。
-
-### 特定のテストファイルを実行
+### カバレッジレポートの生成
 
 ```bash
-pytest tests/unit/test_domain_artwork.py
+pytest --cov=. --cov-report=html:htmlcov
 ```
 
-### 特定のテストクラスを実行
-
-```bash
-pytest tests/unit/test_domain_artwork.py::TestArtwork
-```
-
-### 特定のテストメソッドを実行
-
-```bash
-pytest tests/unit/test_domain_artwork.py::TestArtwork::test_is_available_when_not_sold
-```
+レポートは `htmlcov/index.html` に生成されます。
 
 ## テストマーカー
 
-テストには以下のマーカーが設定されています：
+以下のマーカーを使用してテストをフィルタリングできます。
 
-- `@pytest.mark.unit`: ユニットテスト
-- `@pytest.mark.integration`: 結合テスト
-- `@pytest.mark.slow`: 実行に時間がかかるテスト
+*   `@pytest.mark.unit`: ユニットテスト
+*   `@pytest.mark.integration`: 結合テスト
+*   `@pytest.mark.slow`: 実行に時間がかかるテスト
 
-マーカーでフィルタリング：
+## フィクスチャ (`tests/conftest.py`)
 
-```bash
-# ユニットテストのみ
-pytest -m unit
+`tests/conftest.py` には、テストで共通利用される以下のフィクスチャが定義されています。
 
-# 結合テストのみ
-pytest -m integration
+*   **`app` フィクスチャ**:
+    *   Flask アプリケーションインスタンスを作成します。
+    *   アプリケーションの初期化時に Secrets API からパスワードを取得する処理を**モック**します。これにより、テスト実行時に実際の Secrets API サービスは不要になります。
+    *   テスト用のダミー `backend_token.txt` ファイルを一時ディレクトリに生成し、`config.__init__.TOKEN_FILE` をそのパスにパッチします。
+    *   テスト終了時に、作成したダミーファイルがテスト用の内容と一致する場合のみ削除します。
+*   `client`: テストクライアントインスタンス
+*   `artwork_repository`: `ArtworkRepository` のモックインスタンス
+*   `sample_artwork_dict`, `sample_artwork`: サンプル作品データ（辞書形式とエンティティ）
 
-# スローテストを除外
-pytest -m "not slow"
-```
+## CI/CDでのテスト実行
 
-## テストの追加
-
-### 新しいユニットテストを追加
-
-1. `tests/unit/` ディレクトリに `test_*.py` ファイルを作成
-2. `@pytest.mark.unit` マーカーを追加
-3. テストクラスまたはテスト関数を実装
-
-例：
-
-```python
-import pytest
-from domain.artwork import Artwork
-
-@pytest.mark.unit
-class TestArtwork:
-    def test_something(self):
-        artwork = Artwork(id=1, title="テスト")
-        assert artwork.title == "テスト"
-```
-
-### 新しい結合テストを追加
-
-1. `tests/integration/` ディレクトリに `test_*.py` ファイルを作成
-2. `@pytest.mark.integration` マーカーを追加
-3. Flask test clientを使用してAPIをテスト
-
-例：
-
-```python
-import pytest
-from app import create_app
-
-@pytest.mark.integration
-class TestAPI:
-    def test_endpoint(self):
-        app = create_app()
-        client = app.test_client()
-        response = client.get('/api/health')
-        assert response.status_code == 200
-```
-
-## フィクスチャ
-
-共通のテストデータは `tests/conftest.py` で定義されています：
-
-- `sample_artwork`: サンプル作品エンティティ
-- `sample_artwork_dict`: サンプル作品の辞書データ
-- `sample_order`: サンプル注文エンティティ
-- `sample_order_dict`: サンプル注文の辞書データ
-
-## CI/CDでの実行
-
-GitHub ActionsなどのCI/CDパイプラインでテストを実行する場合：
+GitHub Actions などの CI/CD パイプラインでテストを実行する際は、`secrets-api` への依存関係を適切にモックする設定が必要です。
 
 ```yaml
-- name: Run tests
+- name: Backend テストの実行 (pytest)
   run: |
-    docker compose exec -T backend pytest
+    pytest tests/ --import-mode=append --import-test-modules=mock_secrets_api
 ```
+
+上記は `art-gallery-backend/.github/workflows/ci.yml` に既に実装されているモック化ステップと連携します。
 
 ## トラブルシューティング
 
-### インポートエラーが発生する場合
+### トークンファイル関連のエラー
 
-Pythonパスが正しく設定されているか確認：
+テスト中に `RuntimeError: Token file not found after X attempts.` のようなエラーが発生した場合、`tests/conftest.py` でトークンファイルのモック化が正しく機能しているか確認してください。
 
-```bash
-export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-```
+### その他の一般的なエラー
 
-### データベース接続エラーが発生する場合
-
-結合テストでは実際のデータベースに接続します。コンテナが起動していることを確認：
-
-```bash
-docker compose up -d
-```
+*   **インポートエラー**: `PYTHONPATH` が正しく設定されているか確認してください。
+*   **データベース接続エラー**: 結合テストでは実際のデータベースに接続します。`docker-compose up -d` でデータベースコンテナが起動しているか確認してください。
 
 ## 補足：デプロイ後検証テストについて
 
 本リポジトリには、Ansibleを使用した「デプロイ後検証テスト」が `release-tools/ansible/tests/` ディレクトリに存在します。これは、アプリケーションの単体・結合テストとは異なり、デプロイされたインフラストラクチャおよびアプリケーションが本番環境で期待通りに動作しているかを確認することを目的としています。
 
 デプロイ後検証テストの詳細については、`release-tools/ansible/tests/README.md` を参照してください。
-
