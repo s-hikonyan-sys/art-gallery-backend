@@ -7,9 +7,7 @@ from decimal import Decimal
 from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
 import os
-
-# configモジュールからTOKEN_FILEをインポートするためにインポート
-import config.__init__ as app_config
+import shutil
 
 # テスト用トークンの固定文言
 TEST_TOKEN_CONTENT = "test_backend_token_12345"
@@ -25,38 +23,28 @@ def app(tmp_path_factory):
     # テスト用トークンファイルのパス
     test_token_file_path = temp_token_dir / "backend_token.txt"
 
-    # 2. トークンファイルの作成をスキップするロジックを追加
+    # 2. トークンファイルの作成
     if not test_token_file_path.exists():
-        # ダミーのトークンファイルを生成
         test_token_file_path.write_text(TEST_TOKEN_CONTENT)
-        test_token_file_path.chmod(0o600)  # 適切な権限を設定
+        test_token_file_path.chmod(0o600)
         print(f"Generated test token file: {test_token_file_path}")
-    else:
-        print(
-            f"Test token file already exists, skipping creation: {test_token_file_path}"
-        )
 
-    # 3. config.__init__.py の TOKEN_FILE を上書き
-    # sessionスコープのフィクスチャでは monkeypatch は使えないため patch を使用する
-    with patch.object(app_config, "TOKEN_FILE", test_token_file_path):
+    # 3. config.TOKEN_FILE をパッチで上書き
+    # 文字列指定でパッチを当てることで、configモジュールのTOKEN_FILEを確実に差し替える
+    with patch("config.TOKEN_FILE", test_token_file_path):
         # secrets-apiのHTTPリクエストをモック化
-        # アプリケーション初期化時にConfig._load_config()が呼ばれるため、
-        # create_app()の前にモックを設定する必要がある。
         with patch("requests.get") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = {"password": "test_db_password"}
             mock_response.raise_for_status.return_value = None
             mock_get.return_value = mock_response
 
-            # ここで app と Config をインポートする
-            # app.py などのモジュールレベルで Config が参照されているため、
-            # モックが適用された状態でロードされるようにする
+            # すべてのモックが有効な状態でインポートを実行
             from app import create_app
-            from config import Config
 
-            # Config.load_app_config() は app.py の create_app() 内で呼ばれる
+            # アプリケーション作成（Config.load_app_config()が内部で呼ばれる）
             app = create_app()
-            app.config["TESTING"] = True  # テストモードを有効にする
+            app.config["TESTING"] = True
 
             yield app
 
