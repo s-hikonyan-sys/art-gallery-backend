@@ -13,13 +13,13 @@ import yaml
 CONFIG_DIR = Path(__file__).parent
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
-# トークンファイルのパス (tests/conftest.py でモックされることを想定)
+# トークンファイルのパス（Dockerボリューム経由で secrets-api から提供される）
 TOKEN_FILE = Path("/app/tokens/backend_token.txt")
 
 
-def _get_token_from_file(max_retries: int = 30, retry_interval: int = 1) -> str:
-    """トークンファイルからトークンを取得（リトライあり）. """
-    import time  # 遅延インポート
+def _get_token_from_file(max_retries: int = 5, retry_interval: int = 1) -> str:
+    """トークンファイルからワンタイムトークンを読み込む（リトライあり）. """
+    import time
 
     for attempt in range(max_retries):
         if TOKEN_FILE.exists():
@@ -28,32 +28,28 @@ def _get_token_from_file(max_retries: int = 30, retry_interval: int = 1) -> str:
                 if token:
                     return token
             except Exception as e:
+                # print を維持しつつ、エラー時は継続
                 print(f"Error reading token file (attempt {attempt + 1}): {e}")
 
         if attempt < max_retries - 1:
             time.sleep(retry_interval)
 
     raise RuntimeError(
-        f"Token file not found after {max_retries} attempts. "
-        "Secrets API may not have started yet or failed to generate tokens."
+        f"トークンファイルが見つかりません: {TOKEN_FILE} ({max_retries}回試行後)\n"
+        "secrets-apiコンテナが正常に起動し、トークンを生成しているか確認してください。"
     )
 
 
 def _get_password_from_api(config: dict) -> str:
     """復号化APIからデータベースパスワードを取得する."""
     api_config = config.get("secrets_api", {})
-    api_url = api_config.get("url")
+    api_url = api_config.get("url", "http://art-gallery-secrets-api:5000")
 
-    if not api_url:
-        # デフォルトは Docker 内部ネットワークの固定名
-        api_url = "http://art-gallery-secrets-api:5000"
-
-    # backend_token.txt からトークンを読み込む
+    # secrets-api 認証用トークンの取得
     auth_token = _get_token_from_file()
 
     try:
         headers = {"Authorization": f"Bearer {auth_token}"}
-        # ここでは Config を使わず、取得した api_url を使用する
         response = requests.get(
             f"{api_url}/secrets/database/password", headers=headers, timeout=5
         )
@@ -61,84 +57,44 @@ def _get_password_from_api(config: dict) -> str:
         data = response.json()
         password = data.get("password")
         if not password:
-            raise ValueError("復号APIからパスワードを取得できませんでした")
+            raise ValueError("復号APIからパスワードを取得できませんでした。")
         return password
     except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"復号APIからのパスワード取得に失敗しました: {e}") from e
+        raise RuntimeError(f"復号APIからのパスワード取得に失敗しました: {e}")
 
 
-def _load_config_file(max_retries: int = 5, retry_interval: int = 1) -> dict:
-    """設定ファイルを読み込む（必須）.
+def _load_config_file() -> dict:
+    """config.yaml を読み込む."""
+    if not CONFIG_FILE.exists():
+        raise FileNotFoundError(f"設定ファイルが見つかりません: {CONFIG_FILE}")
 
-    ファイルが存在しない、または読み込みに失敗した場合はリトライします。"""
-    import time
-
-    last_error = None
-    for attempt in range(max_retries):
-        if CONFIG_FILE.exists():
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    config = yaml.safe_load(f) or {}
-                    if not config:
-                        raise ValueError(f"{CONFIG_FILE} が空です")
-                    return config
-            except (yaml.YAMLError, PermissionError, ValueError) as e:
-                last_error = e
-                print(f"Error reading config file (attempt {attempt + 1}): {e}")
-        else:
-            last_error = FileNotFoundError(f"{CONFIG_FILE} が見つかりません")
-
-        if attempt < max_retries - 1:
-            time.sleep(retry_interval)
-
-    raise RuntimeError(
-        f"設定ファイルの読み込みに失敗しました（{max_retries}回試行）: {last_error}\n"
-        "config.yamlが見つからないか、形式が不正です。Ansibleデプロイ時に自動生成されるはずです。"
-    )
-
-
-def _load_secrets(config: dict) -> dict:
-    """復号APIから機密情報を取得（必須）または空の辞書を返す."""
-    secrets = {}
-    # 復号APIからDBパスワードを取得
-    db_password = _get_password_from_api(config)
-    if db_password:
-        secrets["database"] = {"password": db_password}
-
-    # NOTE: secrets_api が backend には存在しないため、ここでは使用しない。
-    # 環境変数 SECRETS_API_URL を介して設定されることを想定。
-    # db_password は直接取得された値として扱う。
-
-    # secrets は常に空のdictを返すか、db_passwordが取得できた場合のみ'database'キーを持つ
-    return secrets
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+            if not config:
+                raise ValueError(f"{CONFIG_FILE} が空です。")
+            return config
+    except Exception as e:
+        raise RuntimeError(f"設定ファイルの読み込みに失敗しました: {e}")
 
 
 def _load_config() -> dict:
-    """設定ファイルを読み込む（必須）."""
-    # config.yamlを読み込む（プレーンテキスト、必須）
+    """全設定（ファイル + API経由の秘密情報）をロードする."""
+    # 1. config.yaml を読み込む
     config = _load_config_file()
 
-    # 復号APIから機密情報を取得（必須）
-    secrets = _load_secrets(config)
+    # 2. 復号APIからパスワードを取得し、config に統合
+    db_password = _get_password_from_api(config)
 
-    # 機密情報をconfigにマージ
-    if "database" in secrets and isinstance(secrets["database"], dict):
-        if "database" not in config:
-            config["database"] = {}
-        if isinstance(config["database"], dict):
-            config["database"].update(secrets["database"])
+    if "database" not in config:
+        config["database"] = {}
+    config["database"]["password"] = db_password
 
-    # 必須項目の検証
+    # 3. 必須項目の検証
     required_keys = ["server", "database", "secrets_api"]
     for key in required_keys:
         if key not in config:
-            raise ValueError(f"config.yamlに必須項目 '{key}' がありません")
-
-    # database.passwordは必須（APIから取得）
-    if "database" in config and "password" not in config["database"]:
-        raise ValueError(
-            "config.yamlにdatabase.passwordがありません（復号APIから取得される必要があります）"
-        )
+            raise ValueError(f"config.yamlに必須項目 '{key}' がありません。")
 
     return config
 
@@ -146,8 +102,7 @@ def _load_config() -> dict:
 class Config:
     """アプリケーション設定クラス.
 
-    設定ファイル（config.yaml）から設定値を読み込み、型安全にアクセスできるようにします。
-    機密情報（パスワードなど）は設定ファイルまたは外部APIから読み込みます。"""
+    シングルトン的に一度だけ設定をロードし、プロパティ経由で型安全なアクセスを提供します。"""
 
     _config: dict = {}
 
@@ -167,12 +122,13 @@ class Config:
     def get_db_config(cls) -> dict:
         """データベース接続設定を辞書形式で返す."""
         config = cls._get_config()
+        db = config["database"]
         return {
-            "host": config["database"]["host"],
-            "port": config["database"]["port"],
-            "database": config["database"]["name"],
-            "user": config["database"]["user"],
-            "password": config["database"]["password"],
+            "host": db["host"],
+            "port": db["port"],
+            "database": db["name"],
+            "user": db["user"],
+            "password": db["password"],
         }
 
     @property
@@ -186,9 +142,8 @@ class Config:
     @property
     def DEBUG(self) -> bool:
         config = self._get_config()
-        return config["server"].get(
-            "debug", config["server"]["flask_env"] == "development"
-        )
+        server = config["server"]
+        return server.get("debug", server["flask_env"] == "development")
 
     @property
     def FRONTEND_URL(self) -> str:
