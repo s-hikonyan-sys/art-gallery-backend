@@ -127,7 +127,7 @@ def sample_artwork_dict():
 
 
 @pytest.fixture
-def sample_artwork(sample_artwork_dict):\
+def sample_artwork(sample_artwork_dict):
     """テスト用の作品エンティティ"""
     from domain.artwork import Artwork
 
