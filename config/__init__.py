@@ -67,22 +67,34 @@ def _get_password_from_api(config: dict) -> str:
         raise RuntimeError(f"復号APIからのパスワード取得に失敗しました: {e}") from e
 
 
-def _load_config_file() -> dict:
-    """設定ファイルを読み込む（必須）."""
-    if not CONFIG_FILE.exists():
-        raise FileNotFoundError(
-            f"必須ファイルが見つかりません: {CONFIG_FILE}\n"
-            "config.yamlが見つかりません。Ansibleデプロイ時に自動生成されるはずです。"
-        )
+def _load_config_file(max_retries: int = 5, retry_interval: int = 1) -> dict:
+    """設定ファイルを読み込む（必須）.
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f) or {}
-            if not config:
-                raise ValueError(f"{CONFIG_FILE} が空です")
-            return config
-    except (FileNotFoundError, yaml.YAMLError, PermissionError) as e:
-        raise RuntimeError(f"{CONFIG_FILE} の読み込みに失敗しました: {e}") from e
+    ファイルが存在しない、または読み込みに失敗した場合はリトライします。"""
+    import time
+
+    last_error = None
+    for attempt in range(max_retries):
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f) or {}
+                    if not config:
+                        raise ValueError(f"{CONFIG_FILE} が空です")
+                    return config
+            except (yaml.YAMLError, PermissionError, ValueError) as e:
+                last_error = e
+                print(f"Error reading config file (attempt {attempt + 1}): {e}")
+        else:
+            last_error = FileNotFoundError(f"{CONFIG_FILE} が見つかりません")
+
+        if attempt < max_retries - 1:
+            time.sleep(retry_interval)
+
+    raise RuntimeError(
+        f"設定ファイルの読み込みに失敗しました（{max_retries}回試行）: {last_error}\n"
+        "config.yamlが見つからないか、形式が不正です。Ansibleデプロイ時に自動生成されるはずです。"
+    )
 
 
 def _load_secrets(config: dict) -> dict:

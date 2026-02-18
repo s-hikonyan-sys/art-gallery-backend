@@ -88,30 +88,12 @@ jobs:
         run: mypy . --ignore-missing-imports
         continue-on-error: true
 
-      - name: 復号APIのモック設定
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          # requests.get をモック化して、常にテスト用のパスワードを返すようにする
-          python3 -c "
-          import pytest
-          import requests
-          from unittest.mock import MagicMock
-
-          @pytest.fixture(autouse=True)
-          def mock_secrets_api(monkeypatch):
-              mock_response = MagicMock()
-              mock_response.json.return_value = {\"password\": \"test_db_password\"}
-              mock_response.raise_for_status.return_value = None
-              monkeypatch.setattr(requests, \"get\", lambda *args, **kwargs: mock_response)
-          " > tests/mock_secrets_api.py # テスト時に読み込まれるようにファイルを生成
-
       - name: Backend テストの実行 (pytest)
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           if [ -d tests ]; then
-            pytest tests/ --import-mode=append --import-test-modules=mock_secrets_api # モックをインポート
+            pytest tests/ --import-mode=append
           else
             echo "No tests directory found, skipping pytest."
           fi
