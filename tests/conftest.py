@@ -111,7 +111,7 @@ def artwork_repository():
 
 @pytest.fixture
 def sample_artwork_dict():
-    """テスト用の作品データ（辞書形式）"""
+    """テスト用の作品データ (辞書形式)"""
     return {
         "id": 1,
         "title": "テスト作品",
