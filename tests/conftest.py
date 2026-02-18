@@ -103,7 +103,7 @@ def client(app):
 
 @pytest.fixture
 def artwork_repository():
-    """ArtworkRepositoryのモックインスタンスを作成.\"\"\"
+    """ArtworkRepositoryのモックインスタンスを作成."""
     from repositories.artwork_repository import ArtworkRepository
 
     return Mock(spec=ArtworkRepository)
