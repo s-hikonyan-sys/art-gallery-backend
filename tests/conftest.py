@@ -1,13 +1,12 @@
-"""pytest設定ファイル
-プロジェクト全体のテストで共通利用するフィクスチャを定義します。
-"""
-
 import pytest
 from decimal import Decimal
 from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
 import os
 import shutil
+
+# configモジュール自体をインポート（モックするために必要）
+import config
 
 # テスト用トークンの固定文言
 TEST_TOKEN_CONTENT = "test_backend_token_12345"
@@ -29,9 +28,35 @@ def app(tmp_path_factory):
         test_token_file_path.chmod(0o600)
         print(f"Generated test token file: {test_token_file_path}")
 
-    # 3. config.TOKEN_FILE をパッチで上書き
-    # 文字列指定でパッチを当てることで、configモジュールのTOKEN_FILEを確実に差し替える
-    with patch("config.TOKEN_FILE", test_token_file_path):
+    # config モジュール全体をモックする
+    # from app import create_app が実行される前に、config モジュールがロードされる。
+    # そのため、config モジュール内の Config クラスやモジュールレベルの変数をモックする必要がある。
+    # patch.dict() で sys.modules を操作する方法もあるが、ここでは patch() を使う
+    with patch("config") as mock_config_module:
+        # Config クラスの振る舞いをモックする
+        # create_app() 内で Config.load_app_config() が呼ばれるため、これをモックする
+        mock_config_module.Config = MagicMock()
+        mock_config_module.Config.FRONTEND_URL = "http://localhost:3000" # flask_cors用
+        mock_config_module.Config.PORT = 5000
+        mock_config_module.Config.DEBUG = True
+        mock_config_module.Config.get_db_config.return_value = {
+            "host": "mock_db_host",
+            "port": 5432,
+            "database": "mock_db",
+            "user": "mock_user",
+            "password": "mock_password",
+        }
+        # load_app_config が呼ばれても何も起きないようにする
+        mock_config_module.Config.load_app_config.return_value = None
+
+        # config モジュールレベルの TOKEN_FILE もモックする
+        # _get_token_from_file が config.TOKEN_FILE を直接参照するため
+        mock_config_module.TOKEN_FILE = test_token_file_path
+
+        # _get_token_from_file および _get_password_from_api がモジュールレベル関数であるため、
+        # これらも config モジュール内の適切な場所でモックされるようにする
+        # ただし、Config.load_app_config() をモックするため、これらの内部関数が直接呼ばれることはない想定
+
         # secrets-apiのHTTPリクエストをモック化
         with patch("requests.get") as mock_get:
             mock_response = MagicMock()
@@ -39,10 +64,9 @@ def app(tmp_path_factory):
             mock_response.raise_for_status.return_value = None
             mock_get.return_value = mock_response
 
-            # すべてのモックが有効な状態でインポートを実行
+            # すべてのモックが有効な状態で app をインポートし、作成
             from app import create_app
 
-            # アプリケーション作成（Config.load_app_config()が内部で呼ばれる）
             app = create_app()
             app.config["TESTING"] = True
 
