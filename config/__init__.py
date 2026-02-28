@@ -13,18 +13,26 @@ import yaml
 CONFIG_DIR = Path(__file__).parent
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
-# トークンファイルのパス（Dockerボリューム経由で secrets-api から提供される）
+# トークンファイルのデフォルトパス（Dockerボリューム経由で secrets-api から提供される）
 TOKEN_FILE = Path("/app/tokens/backend_token.txt")
 
 
-def _get_token_from_file(max_retries: int = 5, retry_interval: int = 1) -> str:
-    """トークンファイルからワンタイムトークンを読み込む（リトライあり）. """
+def _get_token_from_file(max_retries: int = 5, retry_interval: int = 1, config: dict = None) -> str:
+    """トークンファイルからワンタイムトークンを読み込む（リトライあり）.
+
+    config.yaml の secrets_api.token_file が設定されている場合はそのパスを使用する。
+    これによりローカル開発時（バックエンドをホストプロセスで起動する場合）に
+    コンテナ外のトークンファイルパスを指定できる。
+    """
     import time
 
+    token_file_path = config.get("secrets_api", {}).get("token_file") if config else None
+    token_file = Path(token_file_path) if token_file_path else TOKEN_FILE
+
     for attempt in range(max_retries):
-        if TOKEN_FILE.exists():
+        if token_file.exists():
             try:
-                token = TOKEN_FILE.read_text().strip()
+                token = token_file.read_text().strip()
                 if token:
                     return token
             except Exception as e:
@@ -35,7 +43,7 @@ def _get_token_from_file(max_retries: int = 5, retry_interval: int = 1) -> str:
             time.sleep(retry_interval)
 
     raise RuntimeError(
-        f"トークンファイルが見つかりません: {TOKEN_FILE} ({max_retries}回試行後)\n"
+        f"トークンファイルが見つかりません: {token_file} ({max_retries}回試行後)\n"
         "secrets-apiコンテナが正常に起動し、トークンを生成しているか確認してください。"
     )
 
@@ -45,8 +53,8 @@ def _get_password_from_api(config: dict) -> str:
     api_config = config.get("secrets_api", {})
     api_url = api_config.get("url", "http://art-gallery-secrets-api:5000")
 
-    # secrets-api 認証用トークンの取得
-    auth_token = _get_token_from_file()
+    # secrets-api 認証用トークンの取得（config を渡して token_file パスを解決）
+    auth_token = _get_token_from_file(config=config)
 
     try:
         headers = {"Authorization": f"Bearer {auth_token}"}
