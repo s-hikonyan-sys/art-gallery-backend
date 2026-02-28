@@ -117,7 +117,7 @@ def create_app() -> Flask:
 - クラス変数による設定値の管理
 - **機密情報の外部化**: バックエンドコンテナ内に暗号化キーや秘密情報を保持しない設計
 - **ワンタイムトークン認証**: `/app/tokens/backend_token.txt` を使用した安全な取得フロー
-- 環境変数 `SECRETS_API_URL` による接続先の動的な設定
+- `config.yaml` の `secrets_api.url` による接続先の設定（デフォルト: `http://art-gallery-secrets-api:5000`）
 
 ### 3. domain/ - ドメインモデル層
 

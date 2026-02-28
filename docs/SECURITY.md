@@ -14,26 +14,26 @@
 Nginx の設定で以下のアクセスをブロックしています：
 
 ```nginx
-# セキュリティ: 設定ファイルや機密情報へのアクセスをブロック
-location ~ ^/(config|\.env|\.git) {
+# 危険なパスを明示的に拒否
+location ~ ^/(config|internal|\.env|\.git|app\.py|domain|repositories|services|routes|Dockerfile|docker-compose|requirements) {
     deny all;
     return 404;
 }
 
-# セキュリティ: 設定ファイル形式への直接アクセスをブロック
-location ~ \.(yaml|yml|env|ini|conf)$ {
+# 危険なファイル拡張子を明示的に拒否
+location ~ \.(yaml|yml|env|ini|conf|sql|md|txt|log|py)$ {
     deny all;
     return 404;
 }
 ```
 
-**ブロックされるパス**:
-- `/config/*` - 設定ディレクトリ全体
-- `/.env*` - 環境変数ファイル
-- `/.git/*` - Git リポジトリ
-- `*.yaml`, `*.yml` - YAML 設定ファイル
-- `*.env` - 環境変数ファイル
-- `*.ini`, `*.conf` - 設定ファイル
+**ブロックされるパス・拡張子**:
+- `/config/*`, `/internal/*` - 設定・内部ディレクトリ
+- `/.env*`, `/.git/*` - 環境変数ファイル・Git リポジトリ
+- `/app.py`, `/domain/*`, `/repositories/*`, `/services/*`, `/routes/*` - アプリケーションコード
+- `/Dockerfile`, `/docker-compose*`, `/requirements*` - インフラ定義ファイル
+- `*.yaml`, `*.yml`, `*.env`, `*.ini`, `*.conf` - 設定ファイル形式
+- `*.sql`, `*.md`, `*.txt`, `*.log`, `*.py` - その他の機密性の高いファイル形式
 
 ### 3. ディレクトリ構造による保護
 
@@ -64,8 +64,8 @@ curl http://localhost:8000/config/config.yaml
 ## まとめ
 
 - ✅ Flask アプリケーション側で静的ファイル配信なし
-- ✅ Nginx 側で `/config` へのアクセスをブロック
-- ✅ 設定ファイル形式（`.yaml`, `.yml` など）への直接アクセスをブロック
+- ✅ Nginx 側でアプリケーションコード・設定ディレクトリへのアクセスをブロック（ホワイトリスト方式）
+- ✅ 設定ファイル形式（`.yaml`, `.yml`, `.py`, `.sql`, `.log` 等）への直接アクセスをブロック
 - ✅ `.gitignore` で設定ファイルを除外
 - ✅ 機密情報は Secrets API によるワンタイムトークン配布方式で取得
 
