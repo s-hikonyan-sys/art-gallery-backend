@@ -138,44 +138,44 @@ class MyProperties:
             "password": db["password"],
         }
 
-    @property
+    @classmethod
     def PORT(self) -> int:
         return self._get_config()["server"]["port"]
 
-    @property
+    @classmethod
     def FLASK_ENV(self) -> str:
         return self._get_config()["server"]["flask_env"]
 
-    @property
+    @classmethod
     def DEBUG(self) -> bool:
         config = self._get_config()
         server = config["server"]
         return server.get("debug", server["flask_env"] == "development")
 
-    @property
+    @classmethod
     def FRONTEND_URL(self) -> str:
         return self._get_config()["frontend"]["url"]
 
-    @property
+    @classmethod
     def DB_HOST(self) -> str:
         return self._get_config()["database"]["host"]
 
-    @property
+    @classmethod
     def DB_PORT(self) -> int:
         return self._get_config()["database"]["port"]
 
-    @property
+    @classmethod
     def DB_NAME(self) -> str:
         return self._get_config()["database"]["name"]
 
-    @property
+    @classmethod
     def DB_USER(self) -> str:
         return self._get_config()["database"]["user"]
 
-    @property
+    @classmethod
     def DB_PASSWORD(self) -> str:
         return self._get_config()["database"]["password"]
 
-    @property
+    @classmethod
     def SECRETS_API_URL(self) -> str:
         return self._get_config()["secrets_api"]["url"]
