@@ -92,7 +92,7 @@ Routes → Services → Domain ← Repositories
 def create_app() -> Flask:
     """ファクトリーパターンによるアプリケーション作成"""
     app = Flask(__name__)
-    CORS(app, origins=[MyProperties.FRONTEND_URL])
+    CORS(app, origins=[MyProperties.FRONTEND_URL()])
     app.register_blueprint(health_bp)
     app.register_blueprint(artwork_bp)
     app.register_blueprint(order_bp)

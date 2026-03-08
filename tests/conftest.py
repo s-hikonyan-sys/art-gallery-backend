@@ -40,9 +40,9 @@ def app(tmp_path_factory):
     # mock_my_properties_module の中の MyProperties クラスとモジュールレベルの TOKEN_FILE を設定
     mock_my_properties_module.MyProperties = MagicMock()
     # flask_cors の TypeError を避けるため、MyProperties.FRONTEND_URL は直接文字列を返すようにする
-    mock_my_properties_module.MyProperties.FRONTEND_URL = "http://localhost:3000"
-    mock_my_properties_module.MyProperties.PORT = 5000
-    mock_my_properties_module.MyProperties.DEBUG = True
+    mock_my_properties_module.MyProperties.FRONTEND_URL.return_value = "http://localhost:3000"
+    mock_my_properties_module.MyProperties.PORT.return_value = 5000
+    mock_my_properties_module.MyProperties.DEBUG.return_value = True
     mock_my_properties_module.MyProperties.get_db_config.return_value = {
         "host": "mock_db_host",
         "port": 5432,

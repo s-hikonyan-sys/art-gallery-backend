@@ -36,7 +36,7 @@ def create_app() -> Flask:
     app.artwork_service = ArtworkService()
 
     # CORS設定
-    CORS(app, origins=[MyProperties.FRONTEND_URL])
+    CORS(app, origins=[MyProperties.FRONTEND_URL()])
 
     # ブループリントの登録
     app.register_blueprint(health_bp)
@@ -83,4 +83,4 @@ app = create_app()
 if __name__ == "__main__":
     # Note: host='0.0.0.0' is for development only
     # In production, use a reverse proxy (nginx) and bind to localhost
-    app.run(host="0.0.0.0", port=MyProperties.PORT, debug=MyProperties.DEBUG)  # nosec B104
+    app.run(host="0.0.0.0", port=MyProperties.PORT(), debug=MyProperties.DEBUG())  # nosec B104
