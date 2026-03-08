@@ -43,7 +43,7 @@ def create_app() -> Flask:
     app.register_blueprint(artwork_bp)
 
     # ログ設定（常にファイルに出力）
-    log_dir = Path("/app/logs")
+    log_dir = Path("/logs/backend")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # アプリケーションログ

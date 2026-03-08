@@ -10,11 +10,10 @@ import requests
 import yaml
 
 # 設定ファイルのパス
-CONFIG_DIR = Path(__file__).parent
-CONFIG_FILE = CONFIG_DIR / "config.yaml"
+CONFIG_FILE = Path("/conf/backend/config/config.yaml")
 
 # トークンファイルのデフォルトパス（Dockerボリューム経由で secrets-api から提供される）
-TOKEN_FILE = Path("/app/tokens/backend_token.txt")
+TOKEN_FILE = Path("/tokens/backend/backend_token.txt")
 
 
 def _get_token_from_file(max_retries: int = 5, retry_interval: int = 1, config: dict = None) -> str:
