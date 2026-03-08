@@ -10,7 +10,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import sys
 
-from config import Config
+from my_properties import MyProperties
 from flask import Flask
 from flask_cors import CORS
 from routes import artwork_bp, health_bp
@@ -27,8 +27,8 @@ def create_app() -> Flask:
     Returns:
         設定済みのFlaskアプリケーションインスタンス
     """
-    # アプリケーション起動時にConfigクラスを明示的に初期化
-    Config.load_app_config()
+    # アプリケーション起動時にMyPropertiesクラスを明示的に初期化
+    MyProperties.load_app_config()
 
     app = Flask(__name__)
 
@@ -36,14 +36,14 @@ def create_app() -> Flask:
     app.artwork_service = ArtworkService()
 
     # CORS設定
-    CORS(app, origins=[Config.FRONTEND_URL])
+    CORS(app, origins=[MyProperties.FRONTEND_URL])
 
     # ブループリントの登録
     app.register_blueprint(health_bp)
     app.register_blueprint(artwork_bp)
 
     # ログ設定（常にファイルに出力）
-    log_dir = Path("/logs/backend")
+    log_dir = Path("/app/logs")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # アプリケーションログ
@@ -83,4 +83,4 @@ app = create_app()
 if __name__ == "__main__":
     # Note: host='0.0.0.0' is for development only
     # In production, use a reverse proxy (nginx) and bind to localhost
-    app.run(host="0.0.0.0", port=Config.PORT, debug=Config.DEBUG)  # nosec B104
+    app.run(host="0.0.0.0", port=MyProperties.PORT, debug=MyProperties.DEBUG)  # nosec B104

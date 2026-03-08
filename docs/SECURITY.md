@@ -2,12 +2,12 @@
 
 ## 外部アクセスの防止
 
-`config/` ディレクトリは外部からの HTTP リクエストでアクセスできないよう、以下の対策を実施しています。
+`my_properties/` ディレクトリは外部からの HTTP リクエストでアクセスできないよう、以下の対策を実施しています。
 
 ### 1. Flask アプリケーション側
 
 - **静的ファイル配信の設定なし**: Flask アプリケーションには `static_folder` や `send_file` などの静的ファイル配信設定がありません。
-- **ルーティングの制限**: `/api` エンドポイントのみが公開されており、`/config` へのルーティングは存在しません。
+- **ルーティングの制限**: `/api` エンドポイントのみが公開されており、`/my_properties` へのルーティングは存在しません。
 
 ### 2. Nginx 側の対策
 
@@ -15,7 +15,7 @@ Nginx の設定で以下のアクセスをブロックしています：
 
 ```nginx
 # 危険なパスを明示的に拒否
-location ~ ^/(config|internal|\.env|\.git|app\.py|domain|repositories|services|routes|Dockerfile|docker-compose|requirements) {
+location ~ ^/(my_properties|internal|\.env|\.git|app\.py|domain|repositories|services|routes|Dockerfile|docker-compose|requirements) {
     deny all;
     return 404;
 }
@@ -28,7 +28,7 @@ location ~ \.(yaml|yml|env|ini|conf|sql|md|txt|log|py)$ {
 ```
 
 **ブロックされるパス・拡張子**:
-- `/config/*`, `/internal/*` - 設定・内部ディレクトリ
+- `/my_properties/*`, `/internal/*` - 設定・内部ディレクトリ
 - `/.env*`, `/.git/*` - 環境変数ファイル・Git リポジトリ
 - `/app.py`, `/domain/*`, `/repositories/*`, `/services/*`, `/routes/*` - アプリケーションコード
 - `/Dockerfile`, `/docker-compose*`, `/requirements*` - インフラ定義ファイル
@@ -37,7 +37,7 @@ location ~ \.(yaml|yml|env|ini|conf|sql|md|txt|log|py)$ {
 
 ### 3. ディレクトリ構造による保護
 
-- `config/` ディレクトリはアプリケーションコード内に配置
+- `my_properties/` ディレクトリはアプリケーションコード内に配置
 - Web サーバーのドキュメントルート外に配置
 - 直接 URL でアクセスできない構造
 
@@ -56,9 +56,9 @@ location ~ \.(yaml|yml|env|ini|conf|sql|md|txt|log|py)$ {
 
 ```bash
 # 404 エラーが返されることを確認
-curl -I http://localhost:8000/config/config.yaml
+curl -I http://localhost:8000/my_properties/config.yaml
 # または
-curl http://localhost:8000/config/config.yaml
+curl http://localhost:8000/my_properties/config.yaml
 ```
 
 ## まとめ
@@ -69,4 +69,4 @@ curl http://localhost:8000/config/config.yaml
 - ✅ `.gitignore` で設定ファイルを除外
 - ✅ 機密情報は Secrets API によるワンタイムトークン配布方式で取得
 
-これにより、`config/` ディレクトリは外部からの HTTP リクエストでアクセスできません。
+これにより、`my_properties/` ディレクトリは外部からの HTTP リクエストでアクセスできません。

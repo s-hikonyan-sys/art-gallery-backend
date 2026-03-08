@@ -106,7 +106,7 @@ def _load_config() -> dict:
     return config
 
 
-class Config:
+class MyProperties:
     """アプリケーション設定クラス.
 
     シングルトン的に一度だけ設定をロードし、プロパティ経由で型安全なアクセスを提供します。"""

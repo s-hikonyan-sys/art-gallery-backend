@@ -9,7 +9,7 @@
 ```
 backend/
 ├── app.py                      # アプリケーションエントリーポイント
-├── config/                     # 設定管理（secrets-api 連携）
+├── my_properties/                     # 設定管理（secrets-api 連携）
 ├── requirements.txt            # Python依存関係
 ├── Dockerfile                  # Dockerイメージ定義
 ├── pytest.ini                 # pytest設定
@@ -92,7 +92,7 @@ Routes → Services → Domain ← Repositories
 def create_app() -> Flask:
     """ファクトリーパターンによるアプリケーション作成"""
     app = Flask(__name__)
-    CORS(app, origins=[Config.FRONTEND_URL])
+    CORS(app, origins=[MyProperties.FRONTEND_URL])
     app.register_blueprint(health_bp)
     app.register_blueprint(artwork_bp)
     app.register_blueprint(order_bp)
@@ -103,7 +103,7 @@ def create_app() -> Flask:
 - テスト時に異なる設定を注入可能
 - アプリケーションの再利用性が向上
 
-### 2. config/ - 設定管理
+### 2. my_properties/ - 設定管理
 
 **責務**: 設定ファイル（`config.yaml`）からの設定読み込みと、`art-gallery-secrets-api` からの機密情報取得
 
@@ -207,7 +207,7 @@ class Database:
     @contextmanager
     def get_connection() -> Generator[psycopg2.extensions.connection, None, None]:
         """データベース接続を取得するコンテキストマネージャー"""
-        conn = psycopg2.connect(**Config.get_db_config())
+        conn = psycopg2.connect(**MyProperties.get_db_config())
         try:
             yield conn
             conn.commit()

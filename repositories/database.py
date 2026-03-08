@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from typing import Generator
 
 import psycopg2
-from config import Config
+from my_properties import MyProperties
 from psycopg2.extras import RealDictCursor
 
 
@@ -35,7 +35,7 @@ class Database:
             psycopg2.Error: データベース接続エラー"""
         conn = None
         try:
-            conn = psycopg2.connect(**Config.get_db_config())
+            conn = psycopg2.connect(**MyProperties.get_db_config())
             yield conn
             conn.commit()
         except Exception:

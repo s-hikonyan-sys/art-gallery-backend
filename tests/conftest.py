@@ -6,8 +6,8 @@ import os
 import shutil
 import sys # sys モジュールをインポート
 
-# configモジュール自体はトップレベルでインポートしない。
-# 必要に応じて、sys.modules['config'] 経由でモックする。
+# my_propertiesモジュール自体はトップレベルでインポートしない。
+# 必要に応じて、sys.modules['my_properties'] 経由でモックする。
 
 # テスト用トークンの固定文言
 TEST_TOKEN_CONTENT = "test_backend_token_12345"
@@ -29,33 +29,33 @@ def app(tmp_path_factory):
         test_token_file_path.chmod(0o600)
         print(f"Generated test token file: {test_token_file_path}")
 
-    # config モジュールを完全にモックする
-    # app.py がロードされる際に config モジュールが参照されるため、
-    # sys.modules を操作して config モジュール全体を MagicMock に置き換える
+    # my_properties モジュールを完全にモックする
+    # app.py がロードされる際に my_properties モジュールが参照されるため、
+    # sys.modules を操作して my_properties モジュール全体を MagicMock に置き換える
     # このモックはセッション全体で有効になる
-    original_config_module = sys.modules.get('config')
-    mock_config_module = MagicMock()
-    sys.modules['config'] = mock_config_module
+    original_my_properties_module = sys.modules.get('my_properties')
+    mock_my_properties_module = MagicMock()
+    sys.modules['my_properties'] = mock_my_properties_module
 
-    # mock_config_module の中の Config クラスとモジュールレベルの TOKEN_FILE を設定
-    mock_config_module.Config = MagicMock()
-    # flask_cors の TypeError を避けるため、Config.FRONTEND_URL は直接文字列を返すようにする
-    mock_config_module.Config.FRONTEND_URL = "http://localhost:3000"
-    mock_config_module.Config.PORT = 5000
-    mock_config_module.Config.DEBUG = True
-    mock_config_module.Config.get_db_config.return_value = {
+    # mock_my_properties_module の中の MyProperties クラスとモジュールレベルの TOKEN_FILE を設定
+    mock_my_properties_module.MyProperties = MagicMock()
+    # flask_cors の TypeError を避けるため、MyProperties.FRONTEND_URL は直接文字列を返すようにする
+    mock_my_properties_module.MyProperties.FRONTEND_URL = "http://localhost:3000"
+    mock_my_properties_module.MyProperties.PORT = 5000
+    mock_my_properties_module.MyProperties.DEBUG = True
+    mock_my_properties_module.MyProperties.get_db_config.return_value = {
         "host": "mock_db_host",
         "port": 5432,
         "database": "mock_db",
         "user": "mock_user",
         "password": "mock_password",
     }
-    # Config.load_app_config が呼ばれても何も起きないようにする
-    mock_config_module.Config.load_app_config.return_value = None
+    # MyProperties.load_app_config が呼ばれても何も起きないようにする
+    mock_my_properties_module.MyProperties.load_app_config.return_value = None
 
-    # config モジュールレベルの TOKEN_FILE もモックする
-    # _get_token_from_file が config.TOKEN_FILE を直接参照するため
-    mock_config_module.TOKEN_FILE = test_token_file_path
+    # my_properties モジュールレベルの TOKEN_FILE もモックする
+    # _get_token_from_file が my_properties.TOKEN_FILE を直接参照するため
+    mock_my_properties_module.TOKEN_FILE = test_token_file_path
 
     # secrets-apiのHTTPリクエストをモック化
     with patch("requests.get") as mock_get:
@@ -68,15 +68,15 @@ def app(tmp_path_factory):
         from app import create_app
 
         app = create_app()
-        app.config["TESTING"] = True
+        app.my_properties["TESTING"] = True
 
         yield app
 
-    # テスト終了後、config モジュールを元の状態に戻す
-    if original_config_module:
-        sys.modules['config'] = original_config_module
+    # テスト終了後、my_properties モジュールを元の状態に戻す
+    if original_my_properties_module:
+        sys.modules['my_properties'] = original_my_properties_module
     else:
-        del sys.modules['config']
+        del sys.modules['my_properties']
 
     # 4. クリーンアップ処理 (yieldの後)
     if test_token_file_path.exists():

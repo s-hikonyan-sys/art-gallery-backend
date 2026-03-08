@@ -60,7 +60,7 @@ pytest --cov=. --cov-report=html:htmlcov
 *   **`app` フィクスチャ**:
     *   Flask アプリケーションインスタンスを作成します。
     *   アプリケーションの初期化時に Secrets API からパスワードを取得する処理を**モック**します。これにより、テスト実行時に実際の Secrets API サービスは不要になります。
-    *   テスト用のダミー `backend_token.txt` ファイルを一時ディレクトリに生成し、`config.__init__.TOKEN_FILE` をそのパスにパッチします。
+    *   テスト用のダミー `backend_token.txt` ファイルを一時ディレクトリに生成し、`MyProperties.__init__.TOKEN_FILE` をそのパスにパッチします。
     *   テスト終了時に、作成したダミーファイルがテスト用の内容と一致する場合のみ削除します。
 *   `client`: テストクライアントインスタンス
 *   `artwork_repository`: `ArtworkRepository` のモックインスタンス
