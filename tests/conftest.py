@@ -68,7 +68,8 @@ def app(tmp_path_factory):
         from app import create_app
 
         app = create_app()
-        app.my_properties["TESTING"] = True
+        # Flask 標準のテストフラグを有効化
+        app.config["TESTING"] = True
 
         yield app
 
