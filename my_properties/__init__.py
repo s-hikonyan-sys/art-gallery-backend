@@ -179,11 +179,3 @@ class MyProperties:
     @classmethod
     def SECRETS_API_URL(self) -> str:
         return self._get_config()["secrets_api"]["url"]
-
-    @classmethod
-    def SLACK_WEBHOOK_URL(self) -> str:
-        """Slack Incoming Webhook URL（config.yaml の slack.webhook_url）."""
-        url = self._get_config().get("slack", {}).get("webhook_url", "")
-        if not url:
-            raise ValueError("slack.webhook_url is not configured in config.yaml.")
-        return url
