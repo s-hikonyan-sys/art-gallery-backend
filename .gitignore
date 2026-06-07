@@ -8,3 +8,4 @@ htmlcov/
 .coverage
 # 生成される設定ファイルは無視設定にする
 config/config.yaml
+config.yaml

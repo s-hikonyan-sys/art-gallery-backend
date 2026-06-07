@@ -6,7 +6,7 @@ Flask test clientを使用してHTTPリクエストをテストします。
 
 import pytest
 from unittest.mock import Mock
-from app import create_app
+# from app import create_app  # テスト収集時の意図しないアプリ生成を防ぐため削除
 from domain.artwork import Artwork  # Artworkエンティティをインポート
 from decimal import Decimal
 from services.artwork_service import ArtworkService  # 追加
@@ -22,9 +22,9 @@ class TestArtworkEndpoints:
         return Mock(spec=ArtworkService)
 
     @pytest.fixture
-    def client(self, mock_artwork_service):
+    def client(self, app, mock_artwork_service):
         """テストクライアントインスタンスを作成し、モックサービスを注入"""
-        app = create_app()
+        # 引数 app は conftest.py のフィクスチャから提供される
         app.artwork_service = (
             mock_artwork_service  # アプリケーションにモックサービスを注入
         )

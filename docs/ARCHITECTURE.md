@@ -9,7 +9,7 @@
 ```
 backend/
 ├── app.py                      # アプリケーションエントリーポイント
-├── config/                     # 設定管理
+├── my_properties/              # 設定管理（secrets-api 連携）
 ├── requirements.txt            # Python依存関係
 ├── Dockerfile                  # Dockerイメージ定義
 ├── pytest.ini                 # pytest設定
@@ -92,7 +92,7 @@ Routes → Services → Domain ← Repositories
 def create_app() -> Flask:
     """ファクトリーパターンによるアプリケーション作成"""
     app = Flask(__name__)
-    CORS(app, origins=[Config.FRONTEND_URL])
+    CORS(app, origins=[MyProperties.FRONTEND_URL()])
     app.register_blueprint(health_bp)
     app.register_blueprint(artwork_bp)
     app.register_blueprint(order_bp)
@@ -103,35 +103,21 @@ def create_app() -> Flask:
 - テスト時に異なる設定を注入可能
 - アプリケーションの再利用性が向上
 
-### 2. config/ - 設定管理
+### 2. my_properties/ - 設定管理
 
-**責務**: 設定ファイル（`config.yaml`）からの設定読み込みと、外部API（`art-gallery-secrets-api`）からの機密情報取得
+**責務**: 設定ファイル（`config.yaml`）からの設定読み込みと、`art-gallery-secrets-api` からの機密情報取得
 
 **主な機能**:
 - YAML設定ファイルの読み込み
-- 復号化API（`art-gallery-secrets-api`）からのデータベースパスワード取得
+- `art-gallery-secrets-api` からのデータベースパスワード取得（ワンタイムトークン認証）
 - 設定値の型変換（文字列→整数など）
 - デフォルト値の提供
-- データベース接続設定の提供
-
-**コード構造**:
-```python
-class Config:
-    """設定クラス（クラス変数として定義）"""
-    PORT: int = _config['server']['port']
-    DB_HOST: str = _config['database']['host']
-    # ...
-    
-    @classmethod
-    def get_db_config(cls) -> dict:
-        """データベース設定を辞書形式で返す"""
-        return {...}
-```
 
 **設計の特徴**:
 - クラス変数による設定値の管理
-- 外部APIによる機密情報の集中管理（環境変数やローカルファイルを介さない）
-- 認証トークンによるAPIアクセス制御
+- **機密情報の外部化**: バックエンドコンテナ内に暗号化キーや秘密情報を保持しない設計
+- **ワンタイムトークン認証**: `/tokens/backend/backend_token.txt` を使用した安全な取得フロー
+- `config.yaml` の `secrets_api.url` による接続先の設定（デフォルト: `http://art-gallery-secrets-api:5000`）
 - 型ヒントによる型安全性
 
 ### 3. domain/ - ドメインモデル層
@@ -222,7 +208,7 @@ class Database:
     @contextmanager
     def get_connection() -> Generator[psycopg2.extensions.connection, None, None]:
         """データベース接続を取得するコンテキストマネージャー"""
-        conn = psycopg2.connect(**Config.get_db_config())
+        conn = psycopg2.connect(**MyProperties.get_db_config())
         try:
             yield conn
             conn.commit()

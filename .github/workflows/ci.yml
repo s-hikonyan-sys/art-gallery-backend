@@ -43,6 +43,8 @@ jobs:
           pip install -r requirements-test-optional.txt
 
       - name: ダミー設定ファイルの生成 (config.yaml)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           mkdir -p config
           cat <<EOF > config/config.yaml
@@ -58,7 +60,7 @@ jobs:
             name: test_db
             user: test_user
           secrets_api:
-            url: http://localhost:8001
+            url: http://art-gallery-secrets-api:5000
           EOF
 
       - name: ログディレクトリの作成 (アプリケーションの期待するパス)
@@ -88,7 +90,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           if [ -d tests ]; then
-            pytest tests/
+            pytest tests/ --import-mode=append
           else
             echo "No tests directory found, skipping pytest."
           fi

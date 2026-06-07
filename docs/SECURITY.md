@@ -2,68 +2,71 @@
 
 ## 外部アクセスの防止
 
-`config/`ディレクトリは外部からのHTTPリクエストでアクセスできないよう、以下の対策を実施しています。
+`my_properties/` ディレクトリは外部からの HTTP リクエストでアクセスできないよう、以下の対策を実施しています。
 
-### 1. Flaskアプリケーション側
+### 1. Flask アプリケーション側
 
-- **静的ファイル配信の設定なし**: Flaskアプリケーションには`static_folder`や`send_file`などの静的ファイル配信設定がありません
-- **ルーティングの制限**: `/api`エンドポイントのみが公開されており、`/config`へのルーティングは存在しません
+- **静的ファイル配信の設定なし**: Flask アプリケーションには `static_folder` や `send_file` などの静的ファイル配信設定がありません。
+- **ルーティングの制限**: `/api` エンドポイントのみが公開されており、`/my_properties` へのルーティングは存在しません。
 
-### 2. Nginx側の対策
+### 2. Nginx 側の対策
 
-Nginxの設定で以下のアクセスをブロックしています：
+Nginx の設定で以下のアクセスをブロックしています：
 
 ```nginx
-# セキュリティ: 設定ファイルや機密情報へのアクセスをブロック
-location ~ ^/(config|\.env|\.git) {
+# 危険なパスを明示的に拒否
+location ~ ^/(my_properties|internal|\.env|\.git|app\.py|domain|repositories|services|routes|Dockerfile|docker-compose|requirements) {
     deny all;
     return 404;
 }
 
-# セキュリティ: 設定ファイル形式への直接アクセスをブロック
-location ~ \.(yaml|yml|env|ini|conf)$ {
+# 危険なファイル拡張子を明示的に拒否
+location ~ \.(yaml|yml|env|ini|conf|sql|md|txt|log|py)$ {
     deny all;
     return 404;
 }
 ```
 
-**ブロックされるパス**:
-- `/config/*` - 設定ディレクトリ全体
-- `/.env*` - 環境変数ファイル
-- `/.git/*` - Gitリポジトリ
-- `*.yaml`, `*.yml` - YAML設定ファイル
-- `*.env` - 環境変数ファイル
-- `*.ini`, `*.conf` - 設定ファイル
+**ブロックされるパス・拡張子**:
+- `/my_properties/*`, `/internal/*` - 設定・内部ディレクトリ
+- `/.env*`, `/.git/*` - 環境変数ファイル・Git リポジトリ
+- `/app.py`, `/domain/*`, `/repositories/*`, `/services/*`, `/routes/*` - アプリケーションコード
+- `/Dockerfile`, `/docker-compose*`, `/requirements*` - インフラ定義ファイル
+- `*.yaml`, `*.yml`, `*.env`, `*.ini`, `*.conf` - 設定ファイル形式
+- `*.sql`, `*.md`, `*.txt`, `*.log`, `*.py` - その他の機密性の高いファイル形式
 
 ### 3. ディレクトリ構造による保護
 
-- `config/`ディレクトリはアプリケーションコード内に配置
-- Webサーバーのドキュメントルート外に配置
-- 直接URLでアクセスできない構造
+- `my_properties/` ディレクトリはアプリケーションコード内に配置
+- Web サーバーのドキュメントルート外に配置
+- 直接 URL でアクセスできない構造
+
+## 機密情報の管理（Secrets API）
+
+データベースパスワードなどの機密情報は、アプリケーション内に保持しません。
+
+- **Secrets API からの取得**: 起動時に `art-gallery-secrets-api` から、ワンタイムトークン認証を経てパスワードを取得します。
+- **ワンタイムトークン**: `/app/tokens/` に配置される一時的なトークンファイルを使用して認証を行い、取得後はトークンが破棄されます。
+- **不揮発化の防止**: 取得した機密情報はメモリ上でのみ保持され、ファイルに書き出されることはありません。
+- **プロセスの自動終了**: `secrets-api` は役割を終えると自動的に終了し、機密情報へのアクセス経路を最小化します。
 
 ## 確認方法
 
 以下のコマンドで設定ファイルへのアクセスがブロックされていることを確認できます：
 
 ```bash
-# 404エラーが返されることを確認
-curl -I http://localhost:8000/config/config.yaml
+# 404 エラーが返されることを確認
+curl -I http://localhost:8000/my_properties/config.yaml
 # または
-curl http://localhost:8000/config/config.yaml
+curl http://localhost:8000/my_properties/config.yaml
 ```
-
-## 追加のセキュリティ対策
-
-1. **`.gitignore`で除外**: `config/config.yaml`はGitにコミットされません
-2. **環境変数での管理**: 機密情報（パスワードなど）は環境変数で管理
-3. **テンプレートファイル**: `config.yaml.example`のみGitに含める
 
 ## まとめ
 
-- ✅ Flaskアプリケーション側で静的ファイル配信なし
-- ✅ Nginx側で`/config`へのアクセスをブロック
-- ✅ 設定ファイル形式（`.yaml`, `.yml`など）への直接アクセスをブロック
-- ✅ `.gitignore`で設定ファイルを除外
+- ✅ Flask アプリケーション側で静的ファイル配信なし
+- ✅ Nginx 側でアプリケーションコード・設定ディレクトリへのアクセスをブロック（ホワイトリスト方式）
+- ✅ 設定ファイル形式（`.yaml`, `.yml`, `.py`, `.sql`, `.log` 等）への直接アクセスをブロック
+- ✅ `.gitignore` で設定ファイルを除外
+- ✅ 機密情報は Secrets API によるワンタイムトークン配布方式で取得
 
-これにより、`config/`ディレクトリは外部からのHTTPリクエストでアクセスできません。
-
+これにより、`my_properties/` ディレクトリは外部からの HTTP リクエストでアクセスできません。
