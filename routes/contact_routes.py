@@ -1,7 +1,9 @@
 """お問い合わせルート.
 
-POST /api/contact を受け付け、Slack Webhook に転送する。
-セキュリティ対策：
+POST /api/contact を受け付け、キューファイルに保存する。
+Slack への送信は release-tools の GitHub Actions が非同期で行う。
+
+セキュリティ対策:
   - レートリミット（同一IP 1分に3回まで）
   - ハニーポットフィールドによるボット検知
   - JSON スキーマバリデーション（services/contact_service.py）
@@ -14,7 +16,6 @@ from collections import defaultdict
 from threading import Lock
 
 from flask import Blueprint, jsonify, request
-from my_properties import MyProperties
 from services.contact_service import ContactValidationError, process_contact
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,8 @@ contact_bp = Blueprint("contact", __name__)
 # ---------------------------------------------------------------------------
 _rate_store: dict[str, list[float]] = defaultdict(list)
 _rate_lock = Lock()
-RATE_LIMIT_COUNT   = 3    # 許可リクエスト数
-RATE_LIMIT_WINDOW  = 60   # 秒
+RATE_LIMIT_COUNT  = 3   # 許可リクエスト数
+RATE_LIMIT_WINDOW = 60  # 秒
 
 
 def _is_rate_limited(ip: str) -> bool:
@@ -60,7 +61,6 @@ def contact():
         200: {"status": "ok"}
         400: {"status": "error", "message": "..."}
         429: {"status": "error", "message": "Too many requests"}
-        500: {"status": "error", "message": "Server error"}
     """
     # レートリミット
     ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
@@ -74,23 +74,14 @@ def contact():
 
     data = request.get_json(silent=True) or {}
 
-    # ハニーポット（非表示フィールド）がある場合はボットと判断してサイレント OK
+    # ハニーポット（ボットはサイレント OK）
     if data.get("_hp"):
         logger.info("Honeypot triggered from %s", ip)
         return jsonify({"status": "ok"}), 200
 
-    # Slack Webhook URL は設定から取得
-    try:
-        webhook_url = MyProperties.SLACK_WEBHOOK_URL()
-    except Exception:
-        logger.error("SLACK_WEBHOOK_URL is not configured.")
-        return jsonify({"status": "error", "message": "Server configuration error."}), 500
-
-    success, error_msg = process_contact(webhook_url, data)
+    success, error_msg = process_contact(data)
 
     if not success:
-        if error_msg:
-            return jsonify({"status": "error", "message": error_msg}), 400
-        return jsonify({"status": "error", "message": "Failed to send message."}), 500
+        return jsonify({"status": "error", "message": error_msg}), 400
 
     return jsonify({"status": "ok"}), 200
