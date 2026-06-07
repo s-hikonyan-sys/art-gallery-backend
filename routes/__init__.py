@@ -5,6 +5,7 @@
 """
 
 from .artwork_routes import artwork_bp
+from .contact_routes import contact_bp
 from .health import health_bp
 
-__all__ = ["artwork_bp", "health_bp"]
+__all__ = ["artwork_bp", "contact_bp", "health_bp"]

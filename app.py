@@ -13,7 +13,7 @@ import sys
 from my_properties import MyProperties
 from flask import Flask
 from flask_cors import CORS
-from routes import artwork_bp, health_bp
+from routes import artwork_bp, contact_bp, health_bp
 from services.artwork_service import ArtworkService
 
 
@@ -41,6 +41,7 @@ def create_app() -> Flask:
     # ブループリントの登録
     app.register_blueprint(health_bp)
     app.register_blueprint(artwork_bp)
+    app.register_blueprint(contact_bp)
 
     # ログ設定（常にファイルに出力）
     log_dir = Path("/app/logs")
